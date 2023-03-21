@@ -19,4 +19,4 @@ The following files contain the solution to this problem. These consist of:
               An HTML file of the Python Notebook which contains the code along with the results
               Case Study Subjective Questions PDF file
               Case Study Summary PDF file
-              PPT on the Case Study
+              PPT on the Case Study PDF file
