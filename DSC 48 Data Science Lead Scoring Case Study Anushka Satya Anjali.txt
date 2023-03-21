@@ -1,0 +1,1601 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# # DSC 48 Lead Scoring Case Study
+
+# ## Problem Statement
+# An education company named X Education sells online courses to industry professionals. On any given day, many professionals who are interested in the courses land on their website and browse for courses. The company markets its courses on several websites and search engines like Google. 
+# 
+# Once these people land on the website, they might browse the courses or fill up a form for the course or watch some videos. When these people fill up a form providing their email address or phone number, they are classified to be a lead. 
+# 
+# Moreover, the company also gets leads through past referrals. Once these leads are acquired, employees from the sales team start making calls, writing emails, etc. Through this process, some of the leads get converted while most do not. The typical lead conversion rate at X education is around 30%.
+
+# # Business Goals
+# To select the most promising leads, i.e. the leads that are most likely to convert into paying customers. 
+# Build a model wherein a lead score needs to be assigned to each lead such that the customers with a higher lead score have a higher conversion chance and the customers with a lower lead score have a lower conversion chance. 
+# A ballpark of the target lead conversion rate to be around 80% has been given.
+
+# In[298]:
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings('ignore')
+from sklearn import metrics
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.feature_selection import RFE
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+
+# In[299]:
+
+
+leads=pd.read_csv('Leads.csv')
+
+
+# In[300]:
+
+
+leadswithoutduplicate = leads.copy()
+
+# Checking for duplicates and dropping the entire duplicate row if any
+leadswithoutduplicate.drop_duplicates(subset=None, inplace=True)
+leadswithoutduplicate.shape
+
+
+# In[301]:
+
+
+leadswithoutduplicate.info()
+
+
+# In[302]:
+
+
+# Percentage of null values of null value
+round(100*(leadswithoutduplicate.isnull().sum())/len(leadswithoutduplicate.index),2)
+
+
+# ## Data Cleaning-Missing Values and Outliers
+
+# In[303]:
+
+
+# Dropping columns with more than 40 percent missing values
+leadswithoutduplicate.drop(columns=['Asymmetrique Activity Index','Asymmetrique Profile Index','Asymmetrique Activity Score','Asymmetrique Profile Score','Lead Quality'],axis=1,inplace=True)
+
+
+# In[304]:
+
+
+# Dropping lead number as it is not important for the analysis
+leadswithoutduplicate.drop(columns=['Lead Number'],axis=1,inplace=True)
+
+
+# In[305]:
+
+
+# Filling missing values with np Nan or not provided in categorical variables
+leadswithoutduplicate['Specialization'] = leadswithoutduplicate['Specialization'].fillna('not provided')
+leadswithoutduplicate['City'] = leadswithoutduplicate['City'].fillna('not provided')
+leadswithoutduplicate['Tags'] = leadswithoutduplicate['Tags'].fillna('not provided')
+leadswithoutduplicate['What matters most to you in choosing a course'] = leadswithoutduplicate['What matters most to you in choosing a course'].fillna('not provided')
+leadswithoutduplicate['What is your current occupation'] = leadswithoutduplicate['What is your current occupation'].fillna('not provided')
+leadswithoutduplicate['Last Activity'] = leadswithoutduplicate['Last Activity'].fillna('not provided')
+leadswithoutduplicate['Country'] = leadswithoutduplicate['Country'].fillna('not provided')
+leadswithoutduplicate['TotalVisits'] = leadswithoutduplicate['TotalVisits'].fillna(np.NaN)
+leadswithoutduplicate['Page Views Per Visit'] = leadswithoutduplicate['Page Views Per Visit'].fillna(np.NaN)
+leadswithoutduplicate['Lead Source'] = leadswithoutduplicate['Lead Source'].fillna('not provided')
+
+
+# In[306]:
+
+
+leadswithoutduplicate['Last Activity'].value_counts(normalize=True)
+
+
+# In[307]:
+
+
+# Imputing missing values with mode
+leadswithoutduplicate['Last Activity']=leadswithoutduplicate['Last Activity'].replace('not provided','Email Opened')
+
+
+# In[308]:
+
+
+leadswithoutduplicate['Country'].value_counts(normalize=True)
+
+
+# In[309]:
+
+
+# Imputing missing values with mode
+leadswithoutduplicate['Country']=leadswithoutduplicate['Country'].replace('not provided','India')
+
+
+# In[310]:
+
+
+leadswithoutduplicate['City'].value_counts(normalize=True)
+
+
+# In[311]:
+
+
+# Considering Select as a missing value
+leadswithoutduplicate['City']=leadswithoutduplicate['City'].replace('Select','not provided')
+
+
+# In[312]:
+
+
+leadswithoutduplicate['City'].value_counts(normalize=True)
+
+
+# In[313]:
+
+
+# Dropping Country due to only one category being present, dropping City due to 40% missing values
+leadswithoutduplicate.drop(['City','Country'],axis=1,inplace=True)
+
+
+# In[314]:
+
+
+leadswithoutduplicate['Lead Origin'].value_counts(normalize=True)
+
+
+# In[315]:
+
+
+leadswithoutduplicate['Lead Source'].value_counts(normalize=True)
+
+
+# In[316]:
+
+
+leadswithoutduplicate['Lead Source']=leadswithoutduplicate['Lead Source'].replace('google','Google')
+
+
+# In[317]:
+
+
+# Imputing missing values with mode
+leadswithoutduplicate['Lead Source']=leadswithoutduplicate['Lead Source'].replace('not provided','Google')
+
+
+# In[318]:
+
+
+leadswithoutduplicate['Do Not Email'].value_counts(normalize=True)
+
+
+# In[319]:
+
+
+leadswithoutduplicate['Do Not Call'].value_counts(normalize=True)
+
+
+# In[320]:
+
+
+leadswithoutduplicate['Specialization'].value_counts(normalize=True)
+
+
+# In[321]:
+
+
+# Considering missing values as a category of No Information
+leadswithoutduplicate['Specialization']=leadswithoutduplicate['Specialization'] = leadswithoutduplicate['Specialization'].replace(['Select','not provided'] ,'No Information')  
+
+
+# In[322]:
+
+
+#Combining various management specialisation into one category management specialisation
+leadswithoutduplicate['Specialization']=leadswithoutduplicate['Specialization'] = leadswithoutduplicate['Specialization'].replace(['Finance Management','Human Resource Management','Marketing Management','Operations Management','IT Projects Management','Supply Chain Management','Healthcare Management','Hospitality Management','Retail Management'] ,'Management Specializations')  
+
+
+# In[323]:
+
+
+leadswithoutduplicate['Specialization'].value_counts(normalize=True)
+# Not imputing missing values as they could indicate a specialisation not in the list hence user has not selected or the student has not chosen any specialisation
+
+
+# In[324]:
+
+
+leadswithoutduplicate['Last Notable Activity'].value_counts(normalize=True)
+
+
+# In[325]:
+
+
+# Combining low frequency categories into one category others
+leadswithoutduplicate['Last Notable Activity'] = leadswithoutduplicate['Last Notable Activity'].replace(['Had a Phone Conversation','Approached upfront','View in browser link Clicked','Email Received','Email Marked Spam','Visited Booth in Tradeshow','Resubscribed to emails','Form Submitted on Website'],'Others') 
+
+
+# In[326]:
+
+
+leadswithoutduplicate['What is your current occupation'].value_counts(normalize=True)
+
+
+# In[327]:
+
+
+# Imputing missing values with mode
+leadswithoutduplicate['What is your current occupation'] = leadswithoutduplicate['What is your current occupation'].replace(['not provided'],'Unemployed') 
+
+
+# In[328]:
+
+
+leadswithoutduplicate['What matters most to you in choosing a course'].value_counts(normalize=True)
+
+
+# In[329]:
+
+
+# Imputing missing values with mode
+leadswithoutduplicate['What matters most to you in choosing a course'] = leadswithoutduplicate['What matters most to you in choosing a course'].replace(['not provided'],'Better Career Prospects') 
+
+
+# In[330]:
+
+
+leadswithoutduplicate['Search'].value_counts(normalize=True)
+
+
+# In[331]:
+
+
+leadswithoutduplicate['Magazine'].value_counts(normalize=True)
+
+
+# In[332]:
+
+
+leadswithoutduplicate['Newspaper Article'].value_counts(normalize=True)
+
+
+# In[333]:
+
+
+leadswithoutduplicate['X Education Forums'].value_counts(normalize=True)
+
+
+# In[334]:
+
+
+leadswithoutduplicate['Digital Advertisement'].value_counts(normalize=True)
+
+
+# In[335]:
+
+
+leadswithoutduplicate['Through Recommendations'].value_counts(normalize=True)
+
+
+# In[336]:
+
+
+leadswithoutduplicate['Receive More Updates About Our Courses'].value_counts(normalize=True)
+
+
+# In[337]:
+
+
+leadswithoutduplicate['Tags'].value_counts(normalize=True)
+
+
+# In[338]:
+
+
+leadswithoutduplicate['Tags'] = leadswithoutduplicate['Tags'].replace(['switched off','Already a student','Not doing further education','invalid number','wrong number given','Interested  in full time MBA','In confusion whether part time or DLP', 'in touch with EINS','Diploma holder (Not Eligible)','Approached upfront','Graduation in progress','number not provided', 'opp hangup','Still Thinking','Lost to Others','Shall take in the next coming month','Lateral student','Interested in Next batch','Recognition issue (DEC approval)','Want to take admission but has financial problems','University not recognized'], 'Other_Tags')
+
+
+# In[339]:
+
+
+leadswithoutduplicate['Tags'] = leadswithoutduplicate['Tags'].replace(['not provided'], 'Not Specified')
+
+
+# In[340]:
+
+
+leadswithoutduplicate['Tags'].value_counts(normalize=True)
+
+
+# In[341]:
+
+
+leadswithoutduplicate['Update me on Supply Chain Content'].value_counts(normalize=True)
+
+
+# In[342]:
+
+
+leadswithoutduplicate['Get updates on DM Content'].value_counts(normalize=True)
+
+
+# In[343]:
+
+
+leadswithoutduplicate['Lead Profile'].value_counts(normalize=True)
+
+
+# In[344]:
+
+
+leadswithoutduplicate['I agree to pay the amount through cheque'].value_counts(normalize=True)
+
+
+# In[345]:
+
+
+leadswithoutduplicate['A free copy of Mastering The Interview'].value_counts(normalize=True)
+
+
+# In[346]:
+
+
+leadswithoutduplicate['Last Notable Activity'].value_counts(normalize=True)
+
+
+# In[347]:
+
+
+leadswithoutduplicate['How did you hear about X Education'].value_counts(normalize=True)
+
+
+# In[348]:
+
+
+# Dropping these values as they contain values belonging to one category
+leadswithoutduplicate.drop(['Magazine', 'Receive More Updates About Our Courses', 'Update me on Supply Chain Content', 
+                          'Get updates on DM Content', 'I agree to pay the amount through cheque'], axis=1,inplace=True)
+
+
+# In[349]:
+
+
+leadswithoutduplicate['Lead Profile'].value_counts(normalize=True)
+
+
+# In[350]:
+
+
+#Dropping these columns as they contain 40% or more missing values
+leadswithoutduplicate.drop(['Lead Profile','How did you hear about X Education'], axis=1,inplace=True)
+
+
+# In[351]:
+
+
+leadswithoutduplicate.info()
+
+
+# In[352]:
+
+
+# Checking for outliers
+leadswithoutduplicate.describe([.25,.5,.75,.90,.95,.99])
+
+
+# In[353]:
+
+
+#Checking for outliers among numerical variables
+plt.figure(figsize=(20, 25))
+plt.subplot(4,3,1)
+sns.boxplot(y = 'TotalVisits',  data = leadswithoutduplicate)
+plt.subplot(4,3,2)
+sns.boxplot(y = 'Total Time Spent on Website', data = leadswithoutduplicate)
+plt.subplot(4,3,3)
+sns.boxplot(y = 'Page Views Per Visit',  data = leadswithoutduplicate)
+plt.show()
+# Outlier observed in the case of TotalVisits and Page Views Per Visit
+
+
+# In[354]:
+
+
+# Due to the presence of outliers missing values have been imputed with the median
+leadswithoutduplicate['TotalVisits'] = leadswithoutduplicate['TotalVisits'].replace(np.NaN, leadswithoutduplicate['TotalVisits'].median())
+
+
+# In[355]:
+
+
+leadswithoutduplicate['Page Views Per Visit'] = leadswithoutduplicate['Page Views Per Visit'].replace(np.NaN, leadswithoutduplicate['Page Views Per Visit'].median())
+
+
+# # Exploratory Data Analysis
+
+# In[356]:
+
+
+# Lead Origin 
+plt.figure(figsize=(10,5))
+b1=sns.countplot(leadswithoutduplicate['Lead Origin'], hue=leadswithoutduplicate.Converted)
+b1.set_xticklabels(b1.get_xticklabels(),rotation=90)
+for label in b1.containers:
+    b1.bar_label(label)
+plt.show()
+#maximum conversion has been observed in the case of  Landing Page Submission.
+
+
+# In[357]:
+
+
+# Lead Source
+plt.figure(figsize=(10,5))
+c1=sns.countplot(leadswithoutduplicate['Lead Source'], hue=leadswithoutduplicate.Converted)
+c1.set_xticklabels(c1.get_xticklabels(),rotation=90)
+for label in c1.containers:
+    c1.bar_label(label)
+plt.show()
+#maximum conversion has been observed in the case of Google
+
+
+# In[358]:
+
+
+# Do Not Email
+plt.figure(figsize=(7,5))
+d1=sns.countplot(leadswithoutduplicate['Do Not Email'], hue=leadswithoutduplicate.Converted)
+d1.set_xticklabels(d1.get_xticklabels(),rotation=90)
+for label in d1.containers:
+    d1.bar_label(label)
+plt.show()
+#maximum conversion has been observed in the case of No 
+
+
+# In[359]:
+
+
+plt.figure(figsize=(10,5))
+e1=sns.countplot(leadswithoutduplicate['Do Not Call'], hue=leadswithoutduplicate.Converted)
+e1.set_xticklabels(e1.get_xticklabels(),rotation=90)
+for label in e1.containers:
+    e1.bar_label(label)
+plt.show()
+
+
+# In[360]:
+
+
+plt.figure(figsize=(7,5))
+f1=sns.countplot(leadswithoutduplicate['Last Activity'], hue=leadswithoutduplicate.Converted)
+f1.set_xticklabels(f1.get_xticklabels(),rotation=90)
+for label in f1.containers:
+    f1.bar_label(label)
+plt.show()
+
+
+# In[361]:
+
+
+plt.figure(figsize=(7,5))
+g1=sns.countplot(leadswithoutduplicate['Specialization'], hue=leadswithoutduplicate.Converted)
+g1.set_xticklabels(g1.get_xticklabels(),rotation=90)
+for label in g1.containers:
+    g1.bar_label(label)
+plt.show()
+
+
+# In[362]:
+
+
+plt.figure(figsize=(10,5))
+j1=sns.countplot(leadswithoutduplicate['Search'], hue=leadswithoutduplicate.Converted)
+j1.set_xticklabels(j1.get_xticklabels(),rotation=90)
+for label in j1.containers:
+    j1.bar_label(label)
+plt.show()
+
+
+# In[363]:
+
+
+plt.figure(figsize=(10,5))
+k1=sns.countplot(leadswithoutduplicate['Newspaper Article'], hue=leadswithoutduplicate.Converted)
+k1.set_xticklabels(k1.get_xticklabels(),rotation=90)
+for label in k1.containers:
+    k1.bar_label(label)
+plt.show()
+
+
+# In[364]:
+
+
+plt.figure(figsize=(10,5))
+k1=sns.countplot(leadswithoutduplicate['X Education Forums'], hue=leadswithoutduplicate.Converted)
+k1.set_xticklabels(k1.get_xticklabels(),rotation=90)
+for label in k1.containers:
+    k1.bar_label(label)
+plt.show()
+
+
+# In[365]:
+
+
+plt.figure(figsize=(10,5))
+m1=sns.countplot(leadswithoutduplicate['Digital Advertisement'], hue=leadswithoutduplicate.Converted)
+m1.set_xticklabels(m1.get_xticklabels(),rotation=90)
+for label in m1.containers:
+    m1.bar_label(label)
+plt.show()
+
+
+# In[366]:
+
+
+plt.figure(figsize=(10,5))
+n1=sns.countplot(leadswithoutduplicate['Through Recommendations'], hue=leadswithoutduplicate.Converted)
+n1.set_xticklabels(n1.get_xticklabels(),rotation=90)
+for label in n1.containers:
+    n1.bar_label(label)
+plt.show()
+
+
+# In[367]:
+
+
+plt.figure(figsize=(7,5))
+o1=sns.countplot(leadswithoutduplicate['Tags'], hue=leadswithoutduplicate.Converted)
+o1.set_xticklabels(o1.get_xticklabels(),rotation=90)
+for label in o1.containers:
+    o1.bar_label(label)
+plt.show()
+#
+
+
+# In[368]:
+
+
+plt.figure(figsize=(7,5))
+p1=sns.countplot(leadswithoutduplicate['A free copy of Mastering The Interview'], hue=leadswithoutduplicate.Converted)
+p1.set_xticklabels(p1.get_xticklabels(),rotation=90)
+for label in p1.containers:
+    p1.bar_label(label)
+plt.show()
+
+
+# In[369]:
+
+
+plt.figure(figsize=(10,5))
+q1=sns.countplot(leadswithoutduplicate['Last Notable Activity'], hue=leadswithoutduplicate.Converted)
+q1.set_xticklabels(q1.get_xticklabels(),rotation=90)
+for label in q1.containers:
+    q1.bar_label(label)
+plt.show()
+
+
+# In[370]:
+
+
+plt.figure(figsize=(10,5))
+i1=sns.countplot(leadswithoutduplicate['What matters most to you in choosing a course'], hue=leadswithoutduplicate.Converted)
+i1.set_xticklabels(i1.get_xticklabels(),rotation=90)
+for label in i1.containers:
+    i1.bar_label(label)
+plt.show()
+
+
+# In[371]:
+
+
+# Dropping these columns due to the lack of variation in data
+leadswithoutduplicate.drop(['Search','Through Recommendations','Newspaper','X Education Forums','Digital Advertisement','Newspaper Article'],axis=1,inplace=True)
+
+
+# In[372]:
+
+
+# Dropping this column due to the lack of variation in data
+leadswithoutduplicate.drop(['Do Not Call'],axis=1,inplace=True)
+
+
+# In[373]:
+
+
+# Dropping this column due to the lack of variation in data
+leadswithoutduplicate.drop(['What matters most to you in choosing a course'],axis=1,inplace=True)
+
+
+# In[374]:
+
+
+plt.figure(figsize=(10,5))
+h1=sns.countplot(leadswithoutduplicate['What is your current occupation'], hue=leadswithoutduplicate.Converted)
+h1.set_xticklabels(h1.get_xticklabels(),rotation=90)
+for label in h1.containers:
+    h1.bar_label(label)
+plt.show()
+
+
+# In the case of Specialization maximum conversion has been observed in the case of Management Specialization
+# 
+# In the case of Occupation maximum conversion has been observed in the case of Unemployed
+# 
+# In the case of Do Not Email maximum conversion has been observed in the case of No 
+# 
+# In the case of Lead Origin maximum conversion has been observed in the case of  Landing Page Submission.
+# 
+# In the case of Lead Source maximum conversion has been observed in the case of Google
+# 
+# In the case of Last Activity maximum conversion has been observed in the case of SMS Sent
+# 
+# In the case of Last Notable Activity maximum conversion has been observed in the case of SMS Sent
+# 
+# In the case of A free copy of mastering the interview  maximum conversion has been observed in the case of No
+
+# In[375]:
+
+
+#Numerical Variables
+plt.figure(figsize=(7,5))
+r1=sns.barplot(y='TotalVisits', x='Converted',data=leadswithoutduplicate)
+r1.set_xticklabels(r1.get_xticklabels(),rotation=360)
+for label in r1.containers:
+    r1.bar_label(label)
+plt.show()
+
+
+# In[376]:
+
+
+plt.figure(figsize=(7,5))
+t1=sns.barplot(y='Total Time Spent on Website', x='Converted',data=leadswithoutduplicate)
+t1.set_xticklabels(t1.get_xticklabels(),rotation=360,ha='center')
+for label in t1.containers:
+    t1.bar_label(label)
+plt.show()
+
+
+# In[377]:
+
+
+plt.figure(figsize=(7,5))
+t1=sns.barplot(y='Page Views Per Visit', x='Converted',data=leadswithoutduplicate)
+t1.set_xticklabels(t1.get_xticklabels(),rotation=360,ha='center')
+for label in t1.containers:
+    t1.bar_label(label)
+plt.show()
+
+
+# In[378]:
+
+
+plt.figure(figsize = (6,6))
+sns.heatmap(leadswithoutduplicate[['Converted','TotalVisits','Total Time Spent on Website','Page Views Per Visit']].corr(), annot = True, fmt='0.3g', cmap="YlGnBu")
+plt.show()
+
+
+# In[380]:
+
+
+leadswithoutduplicate.info()
+
+
+# ## Dummy Variable Creation
+
+# In[381]:
+
+
+# Creating Dummies
+LeadOrigin=pd.get_dummies(leadswithoutduplicate['Lead Origin'],prefix='LeadOrigin',drop_first=True)
+
+
+# In[382]:
+
+
+LeadSource=pd.get_dummies(leadswithoutduplicate['Lead Source'],prefix='LeadSource',drop_first=True)
+
+
+# In[383]:
+
+
+DoNotEmail=pd.get_dummies(leadswithoutduplicate['Do Not Email'],prefix='DoNotEmail',drop_first=True)
+
+
+# In[384]:
+
+
+LastActivity=pd.get_dummies(leadswithoutduplicate['Last Activity'],prefix='LastActivity',drop_first=True)
+
+
+# In[385]:
+
+
+Specialization1=pd.get_dummies(leadswithoutduplicate['Specialization'],prefix='Specialization1',drop_first=True)
+
+
+# In[386]:
+
+
+Whatisyourcurrentoccupation=pd.get_dummies(leadswithoutduplicate['What is your current occupation'],prefix='Whatisyourcurrentoccupation',drop_first=True)
+
+
+# In[387]:
+
+
+Tags1=pd.get_dummies(leadswithoutduplicate['Tags'],prefix='Tags1',drop_first=True)
+
+
+# In[388]:
+
+
+AfreecopyofMasteringTheInterview=pd.get_dummies(leadswithoutduplicate['A free copy of Mastering The Interview'],prefix='AfreecopyofMasteringTheInterview',drop_first=True)
+
+
+# In[389]:
+
+
+LastNotableActivity=pd.get_dummies(leadswithoutduplicate['Last Notable Activity'],prefix='LastNotableActivity',drop_first=True)
+
+
+# In[390]:
+
+
+leadswithoutduplicate=pd.concat([leadswithoutduplicate,LeadOrigin,LeadSource,DoNotEmail,LastActivity,Specialization1,Whatisyourcurrentoccupation,Tags1,AfreecopyofMasteringTheInterview,LastNotableActivity],axis=1)
+
+
+# In[391]:
+
+
+leadswithoutduplicate.drop(['Lead Origin','Lead Source','Do Not Email','Last Activity','Specialization','A free copy of Mastering The Interview','Last Notable Activity','What is your current occupation','Tags'],axis=1,inplace=True)
+
+
+# In[392]:
+
+
+leadswithoutduplicate.info()
+
+
+# # Spliting into Train and Test Dataset
+
+# In[393]:
+
+
+Y=leadswithoutduplicate['Converted']
+Y.head()
+
+
+# In[394]:
+
+
+X=leadswithoutduplicate.drop(['Converted','Prospect ID'], axis=1)
+X.head()
+
+
+# In[395]:
+
+
+# Spliting data into train and test sets
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, train_size=0.7, test_size=0.3, random_state=100)
+
+
+# In[396]:
+
+
+# Scaling the numerical variables
+scaler=MinMaxScaler()
+num_vars=['TotalVisits','Total Time Spent on Website','Page Views Per Visit']
+X_train[num_vars]=scaler.fit_transform(X_train[num_vars])
+X_train.head()
+
+
+# In[397]:
+
+
+rfe=RFE(estimator=LogisticRegression())
+rfe=rfe.fit(X_train,Y_train)
+
+
+# In[398]:
+
+
+rfe.support_
+
+
+# In[399]:
+
+
+list(zip(X_train.columns,rfe.support_,rfe.ranking_))
+
+
+# In[400]:
+
+
+col=X_train.columns[rfe.support_]
+
+
+# In[401]:
+
+
+X_train.columns[~rfe.support_]
+
+
+# In[402]:
+
+
+X_train_sm=sm.add_constant(X_train[col])
+logm2=sm.GLM(Y_train,X_train_sm,family=sm.families.Binomial())
+res=logm2.fit()
+res.summary()
+
+
+# In[403]:
+
+
+Y_train_pred1=res.predict(X_train_sm)
+
+
+# In[404]:
+
+
+Y_train_pred_final1=pd.DataFrame({'Converted':Y_train.values,'Converted_Prob':Y_train_pred1})
+Y_train_pred_final1['Prospect ID']=Y_train.index
+Y_train_pred_final1.head()
+
+
+# In[405]:
+
+
+Y_train_pred_final1['predicted']=Y_train_pred_final1.Converted_Prob.map(lambda x:1 if x>0.5 else 0)
+Y_train_pred_final1.head()
+
+
+# In[406]:
+
+
+confusion1=metrics.confusion_matrix(Y_train_pred_final1.Converted,Y_train_pred_final1.predicted)
+print(confusion1)
+
+
+# In[407]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final1.Converted,Y_train_pred_final1.predicted))
+
+
+# In[408]:
+
+
+# Checking for multicollinearity
+vif=pd.DataFrame()
+vif['Features']=X_train[col].columns
+vif['VIF']=[variance_inflation_factor(X_train[col].values,i)for i in range(X_train[col].shape[1])]
+vif['VIF']=round(vif['VIF'],2)
+vif=vif.sort_values(by='VIF',ascending=False)
+vif
+
+
+# In[409]:
+
+
+# Dropping variables with high p value low VIF
+X_train_rfe1=X_train[col].drop(columns=['LeadSource_Facebook','LeadSource_NC_EDM','LeadSource_Reference','LeadSource_bing','LastActivity_Converted to Lead','LastActivity_Email Bounced','LastActivity_View in browser link Clicked','Specialization1_E-COMMERCE','Specialization1_International Business','Specialization1_Rural and Agribusiness','Specialization1_Services Excellence','Specialization1_Travel and Tourism','Whatisyourcurrentoccupation_Housewife','LastNotableActivity_Others'],axis=1)
+
+
+# In[410]:
+
+
+X_train_rfe2=sm.add_constant(X_train_rfe1)
+
+
+# In[411]:
+
+
+logm3=sm.GLM(Y_train,X_train_rfe2,family=sm.families.Binomial())
+res=logm3.fit()
+res.summary()
+
+
+# In[412]:
+
+
+Y_train_pred2=res.predict(X_train_rfe2)
+
+
+# In[413]:
+
+
+Y_train_pred_final2=pd.DataFrame({'Converted':Y_train.values,'Converted_Prob':Y_train_pred2})
+Y_train_pred_final2['Prospect ID']=Y_train.index
+Y_train_pred_final2.head()
+
+
+# In[414]:
+
+
+Y_train_pred_final2['predicted']=Y_train_pred_final2.Converted_Prob.map(lambda x:1 if x>0.5 else 0)
+Y_train_pred_final2.head()
+
+
+# In[415]:
+
+
+confusion2=metrics.confusion_matrix(Y_train_pred_final2.Converted,Y_train_pred_final2.predicted)
+print(confusion2)
+
+
+# In[416]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final2.Converted,Y_train_pred_final2.predicted))
+
+
+# In[417]:
+
+
+vif1=pd.DataFrame()
+vif1['Features']=X_train_rfe1.columns
+vif1['VIF']=[variance_inflation_factor(X_train_rfe1.values,i)for i in range(X_train_rfe1.shape[1])]
+vif1['VIF']=round(vif1['VIF'],2)
+vif1=vif1.sort_values(by='VIF',ascending=False)
+vif1
+
+
+# In[418]:
+
+
+# Dropping variables with high p value and low VIF
+X_train_rfe3=X_train_rfe1.drop(columns=['LeadOrigin_Quick Add Form','LastActivity_Olark Chat Conversation'],axis=1)
+
+
+# In[419]:
+
+
+X_train_rfe4=sm.add_constant(X_train_rfe3)
+
+
+# In[420]:
+
+
+logm4=sm.GLM(Y_train,X_train_rfe4,family=sm.families.Binomial())
+res=logm4.fit()
+res.summary()
+
+
+# In[421]:
+
+
+Y_train_pred3=res.predict(X_train_rfe4)
+
+
+# In[422]:
+
+
+Y_train_pred_final3=pd.DataFrame({'Converted':Y_train.values,'Converted_Prob':Y_train_pred3})
+Y_train_pred_final3['Prospect ID']=Y_train.index
+Y_train_pred_final3.head()
+
+
+# In[423]:
+
+
+Y_train_pred_final3['predicted']=Y_train_pred_final3.Converted_Prob.map(lambda x:1 if x>0.5 else 0)
+Y_train_pred_final3.head()
+
+
+# In[424]:
+
+
+confusion3=metrics.confusion_matrix(Y_train_pred_final3.Converted,Y_train_pred_final3.predicted)
+print(confusion3)
+
+
+# In[425]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final3.Converted,Y_train_pred_final3.predicted))
+
+
+# In[426]:
+
+
+vif2=pd.DataFrame()
+vif2['Features']=X_train_rfe3.columns
+vif2['VIF']=[variance_inflation_factor(X_train_rfe3.values,i)for i in range(X_train_rfe3.shape[1])]
+vif2['VIF']=round(vif2['VIF'],2)
+vif2=vif2.sort_values(by='VIF',ascending=False)
+vif2
+
+
+# In[427]:
+
+
+# Dropping variable with high VIF and low p value
+X_train_rfe5=X_train_rfe3.drop(columns=['LastNotableActivity_SMS Sent'],axis=1)
+
+
+# In[428]:
+
+
+X_train_rfe6=sm.add_constant(X_train_rfe5)
+
+
+# In[429]:
+
+
+logm5=sm.GLM(Y_train,X_train_rfe6,family=sm.families.Binomial())
+res=logm5.fit()
+res.summary()
+
+
+# In[430]:
+
+
+Y_train_pred4=res.predict(X_train_rfe6)
+
+
+# In[431]:
+
+
+Y_train_pred_final4=pd.DataFrame({'Converted':Y_train.values,'Converted_Prob':Y_train_pred4})
+Y_train_pred_final4['Prospect ID']=Y_train.index
+Y_train_pred_final4.head()
+
+
+# In[432]:
+
+
+Y_train_pred_final4['predicted']=Y_train_pred_final4.Converted_Prob.map(lambda x:1 if x>0.5 else 0)
+Y_train_pred_final4.head()
+
+
+# In[433]:
+
+
+confusion4=metrics.confusion_matrix(Y_train_pred_final4.Converted,Y_train_pred_final4.predicted)
+print(confusion4)
+
+
+# In[434]:
+
+
+#Predicted     Not Converted  Converted
+#Actual 
+#Not Converted  3833           169
+#Converted      289            2177
+
+
+# In[435]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final4.Converted,Y_train_pred_final4.predicted))
+
+
+# In[436]:
+
+
+vif3=pd.DataFrame()
+vif3['Features']=X_train_rfe5.columns
+vif3['VIF']=[variance_inflation_factor(X_train_rfe5.values,i)for i in range(X_train_rfe5.shape[1])]
+vif3['VIF']=round(vif3['VIF'],2)
+vif3=vif3.sort_values(by='VIF',ascending=False)
+vif3
+
+
+# ### Accuracy in 1st case was 93.02% in 2nd case was 93.01% in the 3rd case was 92.97% and in the final selected case based on p values and VIF it was 92.92%.Accuracy has not changed with dropping variables
+
+# In[437]:
+
+
+TP = confusion4[1,1] # true positive 
+TN = confusion4[0,0] # true negatives
+FP = confusion4[0,1] # false positives
+FN = confusion4[1,0] # false negatives
+
+
+# In[438]:
+
+
+Sensitivity=float(TP/(TP+FN))
+print(Sensitivity)
+
+
+# In[439]:
+
+
+Specificity=float(TN/(TN+FP))
+print(Specificity)
+
+
+# In[440]:
+
+
+# Defining the function to plot the ROC curve
+def draw_roc( actual, probs ):
+    fpr, tpr, thresholds = metrics.roc_curve( actual, probs,
+                                              drop_intermediate = False )
+    auc_score = metrics.roc_auc_score( actual, probs )
+    plt.figure(figsize=(5, 5))
+    plt.plot( fpr, tpr, label='ROC curve (area = %0.2f)' % auc_score )
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate or [1 - True Negative Rate]')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver operating characteristic example')
+    plt.legend(loc="lower right")
+    plt.show()
+
+    return None
+
+
+draw_roc(Y_train_pred_final4.Converted, Y_train_pred_final4.Converted_Prob)
+# AUC is 0.97 and the curve is far away from the 45 degree line indicating a good fit
+
+
+# In[441]:
+
+
+# Precision and Recall Statistics 
+from sklearn.metrics import precision_score,recall_score
+
+
+# In[442]:
+
+
+Precision=float(TP/(TP+FP))
+print(Precision)
+
+
+# In[443]:
+
+
+Recall=float(TP/(TP+FN))
+print(Recall)
+
+
+# Accuracy-92.92%
+# Sensitivity-88.28%
+# Specificity-95.77%
+# Precision-92.79%
+# Recall-88.28%
+
+# # Finding optimal probability threshold based on sensitivity-specificity trade off
+
+# In[444]:
+
+
+# Finding optimal probability threshold based on sensitivity-specificity trade off
+numbers=[float(x)/10 for x in range(10)]
+for i in numbers:
+    Y_train_pred_final4[i]=Y_train_pred_final4.Converted_Prob.map(lambda x:1 if x>i else 0)
+Y_train_pred_final4.head(30)
+
+
+# In[445]:
+
+
+# Calculating accuracy sensitivity and specificity for various probability cutoffs.
+cutoff_df = pd.DataFrame(columns = ['Probability','Accuracy','Sensitivity','Specificity'])
+num = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
+for i in num:
+    cm4 = metrics.confusion_matrix(Y_train_pred_final4.Converted, Y_train_pred_final4[i] )
+    total4=sum(sum(cm4))
+    Accuracy = (cm4[0,0]+cm4[1,1])/total4   
+    Specificity = cm4[0,0]/(cm4[0,0]+cm4[0,1])
+    Sensitivity = cm4[1,1]/(cm4[1,0]+cm4[1,1])
+    cutoff_df.loc[i] =[ i ,Accuracy,Sensitivity,Specificity]
+print(cutoff_df)
+
+
+# In[446]:
+
+
+cutoff_df.plot.line(x='Probability', y=['Accuracy','Sensitivity','Specificity'])
+plt.show()
+# Optimal Probability threhold is at 0.3 where accuracy,sensitivity and specificity intersect
+
+
+# In[447]:
+
+
+Y_train_pred_final4['final_Predicted'] = Y_train_pred_final4.Converted_Prob.map(lambda x: 1 if x > 0.3 else 0)
+Y_train_pred_final4.head(20)
+
+
+# In[448]:
+
+
+Y_train_pred_final4['lead_score'] = Y_train_pred_final4.Converted_Prob.map(lambda x: round(x*100))
+Y_train_pred_final4.head(20)
+
+
+# In[449]:
+
+
+# Calculating lead conversion rate at probability threshold of 0.3
+checkingconvertedpredictions = Y_train_pred_final4.loc[Y_train_pred_final4['Converted']==1,['Converted','final_Predicted']]
+checkingconvertedpredictions['final_Predicted'].value_counts()
+
+
+# In[450]:
+
+
+# Calculating lead conversion rate at probability threshold of 0.3
+float(2251/(2251+215))
+# A lead conversion rate of 91.28% has been observed meeting the goal of 80% lead conversion.
+
+
+# In[451]:
+
+
+# Calculating confusion matrix for optimum probability cutoff
+confusion5=metrics.confusion_matrix(Y_train_pred_final4.Converted,Y_train_pred_final4.final_Predicted)
+print(confusion5)
+
+
+# In[452]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final4.Converted,Y_train_pred_final4.final_Predicted))
+
+
+# In[453]:
+
+
+TP1 = confusion5[1,1] # true positive 
+TN2 = confusion5[0,0] # true negatives
+FP1 = confusion5[0,1] # false positives
+FN2 = confusion5[1,0] # false negatives
+
+
+# In[454]:
+
+
+Sensitivity1=float(TP1/(TP1+FN2))
+print(Sensitivity1)
+
+
+# In[455]:
+
+
+Specificity1=float(TN2/(TN2+FP1))
+print(Specificity1)
+
+
+# In[456]:
+
+
+Precision11=float(TP1/(TP1+FP1))
+print(Precision11)
+# precision at optimal probability threshold of 0.3 is 88.97%
+
+
+# In[457]:
+
+
+Recall11=float(TP1/(TP1+FN2))
+print(Recall11)
+# recall at optimal probability threshold of 0.3 is 91.28%
+
+
+# # Optimal Probability Threshold using Precision and Recall Curve
+
+# In[460]:
+
+
+# Precision Recall Curve
+from sklearn.metrics import precision_recall_curve
+
+
+# In[461]:
+
+
+Y_train_pred_final4.Converted,Y_train_pred_final4.predicted
+
+
+# In[462]:
+
+
+Y_train_pred_final4.Converted,Y_train_pred_final4.predicted
+Precision,Recall,Thresholds=precision_recall_curve(Y_train_pred_final4.Converted,Y_train_pred_final4.Converted_Prob)
+
+
+# In[463]:
+
+
+plt.plot(Thresholds,Precision[:-1],'g-')
+plt.plot(Thresholds,Recall[:-1],'r-')
+plt.show()
+# Optimum probability threshold is 0.38 according to precision-recall curve
+
+
+# In[464]:
+
+
+# Evaluating model at precision recall probability threshold
+Y_train_pred_final4['finalpredicted1']=Y_train_pred_final4.Converted_Prob.map(lambda x:1 if x>0.38 else 0)
+Y_train_pred_final4.head()
+
+
+# In[465]:
+
+
+confusion7=metrics.confusion_matrix(Y_train_pred_final4.Converted,Y_train_pred_final4.finalpredicted1)
+print(confusion7)
+
+
+# In[466]:
+
+
+TP7 = confusion7[1,1] # true positive 
+TN7 = confusion7[0,0] # true negatives
+FP7 = confusion7[0,1] # false positives
+FN7 = confusion7[1,0] # false negatives
+
+
+# In[467]:
+
+
+print(metrics.accuracy_score(Y_train_pred_final4.Converted,Y_train_pred_final4.finalpredicted1))
+
+
+# In[468]:
+
+
+Sensitivity7=float(TP7/(TP7+FN7))
+print(Sensitivity7)
+
+
+# In[469]:
+
+
+Specificity7=float(TN7/(TN7+FP7))
+print(Specificity7)
+
+
+# In[470]:
+
+
+precision_score(Y_train_pred_final4.Converted,Y_train_pred_final4.finalpredicted1)
+
+
+# In[471]:
+
+
+recall_score(Y_train_pred_final4.Converted,Y_train_pred_final4.finalpredicted1)
+
+
+# In[472]:
+
+
+# Considering the sensitivity, specificity trade off probability cutoff of 0.3. Testing the model on test dataset
+
+
+# # Evaluating Model on the Test Set
+
+# In[473]:
+
+
+X_test[num_vars]=scaler.transform(X_test[num_vars])
+X_test.head()
+
+
+# In[474]:
+
+
+col=X_train_rfe5.columns
+
+
+# In[475]:
+
+
+print(col)
+
+
+# In[476]:
+
+
+X_test_rfe5=X_test[col]
+
+
+# In[477]:
+
+
+X_test_rfe6=sm.add_constant(X_test_rfe5)
+
+
+# In[478]:
+
+
+Y_test_pred4=res.predict(X_test_rfe6)
+
+
+# In[479]:
+
+
+Y_Pred_1=pd.DataFrame(Y_test_pred4)
+
+
+# In[480]:
+
+
+Y_test_df=pd.DataFrame(Y_test)
+
+
+# In[481]:
+
+
+Y_test_df['Prospect ID']=Y_test_df.index
+
+
+# In[482]:
+
+
+Y_Pred_1.reset_index(drop=True,inplace=True)
+Y_test_df.reset_index(drop=True,inplace=True)
+
+
+# In[483]:
+
+
+Y_test_Pred_final=pd.concat([Y_test_df,Y_Pred_1],axis=1)
+
+
+# In[484]:
+
+
+Y_test_Pred_final.head()
+
+
+# In[485]:
+
+
+Y_test_Pred_final=Y_test_Pred_final.rename(columns={0:'Converted_Prob'})
+
+
+# In[486]:
+
+
+Y_test_Pred_final.head()
+
+
+# In[487]:
+
+
+Y_test_Pred_final['finalpredicted']=Y_test_Pred_final.Converted_Prob.map(lambda x:1 if x>0.3 else 0)
+
+
+# In[488]:
+
+
+Y_test_Pred_final.head()
+
+
+# In[489]:
+
+
+Y_test_Pred_final['leadscore'] = Y_test_Pred_final.Converted_Prob.map(lambda x: round(x*100))
+Y_test_Pred_final.head(20)
+
+
+# In[490]:
+
+
+# Checking Lead Score Conversion Rate on Test DataSet
+checkingtestconvertedprediction = Y_test_Pred_final.loc[Y_test_Pred_final['Converted']==1,['Converted','finalpredicted']]
+checkingtestconvertedprediction['finalpredicted'].value_counts()
+
+
+# In[491]:
+
+
+float(1016/(1016+79))
+# lead score conversion rate of 92.79% meeting the goal of 80% lead conversion rate
+
+
+# In[492]:
+
+
+confusion10=metrics.confusion_matrix(Y_test_Pred_final.Converted,Y_test_Pred_final.finalpredicted)
+print(confusion10)
+
+
+# In[493]:
+
+
+# Accuracy
+print(metrics.accuracy_score(Y_test_Pred_final.Converted,Y_test_Pred_final.finalpredicted))
+
+
+# In[494]:
+
+
+TP10 = confusion10[1,1] # true positive 
+TN10 = confusion10[0,0] # true negatives
+FP10 = confusion10[0,1] # false positives
+FN10 = confusion10[1,0] # false negatives
+
+
+# In[495]:
+
+
+#Sensitivity
+Sensitivity10=float(TP10/(TP10+FN10))
+print(Sensitivity10)
+
+
+# In[496]:
+
+
+#Specificity
+Specificity10=float(TN10/(TN10+FP10))
+print(Specificity10)
+
+
+# In[497]:
+
+
+print('Precision ',precision_score(Y_test_Pred_final.Converted,Y_test_Pred_final.finalpredicted))
+print('Recall ',recall_score(Y_test_Pred_final.Converted,Y_test_Pred_final.finalpredicted))
+
+
+# In[498]:
+
+
+# ROC Curve for test dataset AUC 0.93 away from 45 degree diagonal
+draw_roc(Y_test_Pred_final.Converted,Y_test_Pred_final.finalpredicted)
+
+
+# Model Evaluation(Sensitivity-Specificity Trade Off Optimal Probability 0.3)-Train Set
+#             
+#             AUC of ROC-0.97
+#             Accuracy-92.36%
+#             Sensitivity-91.28%
+#             Specificity-93.03%
+#             Precision-88.97%
+#             Recall-91.28%
+#             Lead Conversion Rate-91.28%
+# Model Evaluation(Sensitivity-Specificity Trade Off Optimal Probability 0.3)-Test Set
+#             
+#             AUC of ROC-0.93
+#             Accuracy-92.53
+#             Sensitivity-92.79%
+#             Specificity-92.37%
+#             Precision-88.81%
+#             Recall-92.79%
+#             Lead Conversion Rate-92.79%
+
+# # Conclusions and Implications from the Model
+# Final Regression Equation
+# ln(p/(1-p))= (-1.4387) + 6.2833*TotalVisits + 4.3093*Total Time Spent on Website + (-0.7983)*LeadOrigin_Landing Page Submission + 1.1354*LeadOrigin_Lead Add Form + 0.7618*LeadSource_Olark Chat + 4.0108*LeadSource_Welingak Website + (-0.6762)*DoNotEmail_Yes + (-0.6028)*LastActivity_Page Visited on Website + 1.9544*LastActivity_SMS Sent + 0.8386*Whatisyourcurrentoccupation_Working Professional + 6.7275*Tags1_Closed by Horizzon +(-2.4854)*Tags1_Interested in other courses + 5.6726*Tags1_Lost to ENIS + (-0.6070)*Tags1_Not Specified+ (-2.846)*Tags1_Other Tags + (-3.9524)*Tags1_Ringing + 3.8703*Tags1_Will Revert after reading the email +(-1.3266)* LastNotableActivity_Email Link Clinked + (-1.6697)* LastNotableActivity_Modified +(-1.7145)*LastNotableActivity_Olark Chat Conversation
+# 
+# 
+# The top three variables which contribute most towards the probability of a lead getting converted include:
+#                 
+#                 Closed by Horizzon (from Tags) (coefficient 6.7275)
+#                 Total Visits (coefficient 6.2833)
+#                 Lost to ENIS (from Tags) (coefficient 5.6726)
+# The top three categorical/dummy variables which contribute most towards the probability of a lead getting converted include:
+#                 
+#                 Closed by Horizzon (from Tags) (coefficient 6.7275)
+#                 Lost to ENIS (from Tags) (coefficient 5.6726)
+#                 Welingak Website (from Lead Source) (coefficient 4.010)
+# 
+# Other important variables consist of Tags(Ringing),Tags(Will revert after reading the mail),Tags(Interested in other courses),Last Activity(SMS Sent),Lead Origin(Lead Add Form),Lead Source(Olark Chat),Occupation(Working Professional),Last Activity(SMS Sent),Last Notable Activity(Olark Chat Conversation)
+# 
+
+# In[ ]:
+
+
+
+
