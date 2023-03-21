@@ -16,7 +16,6 @@ To select the most promising leads, i.e. the leads that are most likely to conve
 The following files contain the solution to this problem. These consist of:
               
               A Python notebook containing the code
-              An HTML file of the Python Notebook which contains the code along with the results
               Case Study Subjective Questions PDF file
               Case Study Summary PDF file
               PPT on the Case Study PDF file
